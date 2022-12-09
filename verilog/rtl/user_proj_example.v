@@ -68,98 +68,144 @@ module user_proj_example #(
     // IRQ
     output [2:0] irq
 );
-    wire clk;
-    wire rst;
-
-    wire [`MPRJ_IO_PADS-1:0] io_in;
-    wire [`MPRJ_IO_PADS-1:0] io_out;
-    wire [`MPRJ_IO_PADS-1:0] io_oeb;
-
-    wire [31:0] rdata; 
-    wire [31:0] wdata;
-    wire [BITS-1:0] count;
-
-    wire valid;
-    wire [3:0] wstrb;
-    wire [31:0] la_write;
-
-    // WB MI A
-    assign valid = wbs_cyc_i && wbs_stb_i; 
-    assign wstrb = wbs_sel_i & {4{wbs_we_i}};
-    assign wbs_dat_o = rdata;
-    assign wdata = wbs_dat_i;
-
-    // IO
-    assign io_out = count;
-    assign io_oeb = {(`MPRJ_IO_PADS-1){rst}};
-
-    // IRQ
+ wire [1:0] change,in;
+ wire out,clock,reset;
+  
+ assign clock=wb_clk_i;
+ assign reset = wb_rst_i;
+ assign in=io_in[`MPRJ_IO_PADS-1:`MPRJ_IO_PADS-2];
+ assign io_out[`MPRJ_IO_PADS-1:35]={change,out}
+ 
+ // IRQ
     assign irq = 3'b000;	// Unused
+    
+ iiitb_vm instance(change,out,in,clock,reset);
+ 
+endmodule
 
-    // LA
-    assign la_data_out = {{(127-BITS){1'b0}}, count};
-    // Assuming LA probes [63:32] are for controlling the count register  
-    assign la_write = ~la_oenb[63:32] & ~{BITS{valid}};
-    // Assuming LA probes [65:64] are for controlling the count clk & reset  
-    assign clk = (~la_oenb[64]) ? la_data_in[64]: wb_clk_i;
-    assign rst = (~la_oenb[65]) ? la_data_in[65]: wb_rst_i;
+module iiitb_vm(output reg [1:0] change,output reg out,input [1:0] in, input clock,input reset);
+reg [2:0] c_state,n_state;
 
-    counter #(
-        .BITS(BITS)
-    ) counter(
-        .clk(clk),
-        .reset(rst),
-        .ready(wbs_ack_o),
-        .valid(valid),
-        .rdata(rdata),
-        .wdata(wbs_dat_i),
-        .wstrb(wstrb),
-        .la_write(la_write),
-        .la_input(la_data_in[63:32]),
-        .count(count)
-    );
+always@(posedge clock)
+begin
+	if(~reset)
+		c_state<=3'b000;
+	else
+	    c_state<=n_state;
+end
+
+always@(*)
+begin
+case(c_state)
+3'b000:begin 
+		if(in==2'b00)
+			n_state=3'b000;
+		else if(in==2'b01)
+			n_state=3'b001;
+		else if(in==2'b10)
+			n_state=3'b011;
+		else
+			n_state=3'b000;
+	  end
+3'b001:begin 
+		if(in==2'b00)
+			n_state=3'b010;
+		else if(in==2'b01)
+			n_state=3'b011;
+		else if(in==2'b10)
+			n_state=3'b100;
+		else
+			n_state=3'b000;
+	  end
+3'b010:begin 
+		if(in==2'b00)
+			n_state=3'b000;
+		else if(in==2'b01)
+			n_state=3'b001;
+		else if(in==2'b10)
+			n_state=3'b011;
+		else
+			n_state=3'b000;
+	  end
+3'b011:begin 
+		if(in==2'b00)
+			n_state=3'b101;
+		else if(in==2'b01)
+			n_state=3'b100;
+		else if(in==2'b10)
+			n_state=3'b110;
+		else
+			n_state=3'b000;
+	  end
+3'b100:begin 
+		if(in==2'b00)
+			n_state=3'b000;
+		else if(in==2'b01)
+			n_state=3'b001;
+		else if(in==2'b10)
+			n_state=3'b011;
+		else
+			n_state=3'b000;
+	  end
+3'b011:begin 
+		if(in==2'b00)
+			n_state=3'b000;
+		else if(in==2'b01)
+			n_state=3'b001;
+		else if(in==2'b10)
+			n_state=3'b011;
+		else
+			n_state=3'b000;
+	  end
+3'b110:begin 
+		if(in==2'b00)
+			n_state=3'b000;
+		else if(in==2'b01)
+			n_state=3'b001;
+		else if(in==2'b10)
+			n_state=3'b011;
+		else
+			n_state=3'b000;
+	  end
+default: n_state=3'b000;
+endcase
+end
+
+always@(*)
+begin
+case(c_state)
+3'b000: begin
+		change=2'b00;
+		out=0;
+		end
+3'b001: begin
+		change=2'b00;
+		out=0;
+		end		
+3'b010: begin
+		change=2'b01;
+		out=0;
+		end
+3'b011: begin
+		change=2'b00;
+		out=0;
+		end
+3'b100: begin
+		change=2'b00;
+		out=1;
+		end
+3'b101: begin
+		change=2'b10;
+		out=0;
+		end
+3'b110: begin
+		change=2'b01;
+		out=1;
+		end
+default:begin out=0; change=2'b00; end
+endcase
+end
 
 endmodule
 
-module counter #(
-    parameter BITS = 32
-)(
-    input clk,
-    input reset,
-    input valid,
-    input [3:0] wstrb,
-    input [BITS-1:0] wdata,
-    input [BITS-1:0] la_write,
-    input [BITS-1:0] la_input,
-    output ready,
-    output [BITS-1:0] rdata,
-    output [BITS-1:0] count
-);
-    reg ready;
-    reg [BITS-1:0] count;
-    reg [BITS-1:0] rdata;
-
-    always @(posedge clk) begin
-        if (reset) begin
-            count <= 0;
-            ready <= 0;
-        end else begin
-            ready <= 1'b0;
-            if (~|la_write) begin
-                count <= count + 1;
-            end
-            if (valid && !ready) begin
-                ready <= 1'b1;
-                rdata <= count;
-                if (wstrb[0]) count[7:0]   <= wdata[7:0];
-                if (wstrb[1]) count[15:8]  <= wdata[15:8];
-                if (wstrb[2]) count[23:16] <= wdata[23:16];
-                if (wstrb[3]) count[31:24] <= wdata[31:24];
-            end else if (|la_write) begin
-                count <= la_write & la_input;
-            end
-        end
-    end
-
-endmodule
 `default_nettype wire
